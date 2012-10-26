@@ -21,9 +21,9 @@
  * Software Foundation website at <http://www.gnu.org/licenses/>.
  *
  * PHP version 5
- * @copyright  Tim Gatzky 2011 
+ * @copyright  Tim Gatzky 2012 
  * @author     Tim Gatzky <info@tim-gatzky.de>
- * @package    Catalog 
+ * @package    catalognotelist_cataloglist 
  * @license    LGPL 
  * @filesource
  */
@@ -31,7 +31,8 @@
 /**
  * Hooks
  */
-$GLOBALS['TL_HOOKS']['parseFrontendTemplate'][] = array('CatalogListNotelistHelper', 'parseFrontendTemplateHook');
+$GLOBALS['TL_HOOKS']['generatePage'][] = array('CatalogListNotelistHelper', 'updateNotelist');
+
 
 
 /**

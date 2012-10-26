@@ -21,9 +21,9 @@
  * Software Foundation website at <http://www.gnu.org/licenses/>.
  *
  * PHP version 5
- * @copyright  Tim Gatzky 2011 
+ * @copyright  Tim Gatzky 2012 
  * @author     Tim Gatzky <info@tim-gatzky.de>
- * @package    Catalog 
+ * @package    catalognotelist_cataloglist 
  * @license    LGPL 
  * @filesource
  */
@@ -31,22 +31,33 @@
 
 class CatalogListNotelistHelper extends Frontend
 {
-	public function parseFrontendTemplateHook($strContent, $strTemplate)
+	/**
+	 * Update item amount or remove item from notelist
+	 * called from: generatePage HOOK
+	 * @param object
+	 * @param object
+	 * @param object
+	 * @return void
+	 */
+	public function updateNotelist(Database_Result $objPage, Database_Result $objLayout, PageRegular $objPageRegular)
 	{
-		if(strpos($this->Input->post('FORM_SUBMIT'), 'catalognotelist') && strlen($_POST['FORM_SUBMIT']))
+		if(strpos($this->Input->post('FORM_SUBMIT'), 'catalognotelist') && strlen($this->Input->post('CATALOG')) && strlen($this->Input->post('CATALOG_ITEM')) )
 		{
-			$catid = $this->Input->post('catid');
-			$itemid = $this->Input->post('itemid');
-			$amount = $this->Input->post('amount_'.$catid.'_'.$itemid);
+			$catid = $this->Input->post('CATALOG');
+			$itemid = $this->Input->post('CATALOG_ITEM');
+			$amount = $this->Input->post('AMOUNT_NOTELIST_ITEM');
 			
-			// UPDATE AMOUNT
-			if(isset($_REQUEST['update_'.$catid.'_'.$itemid]))
+			$this->import('Session');
+			$arrSession = $this->Session->getData();
+				
+			if(!count($arrSession['catalog_notelist'])) 
 			{
-				$this->import('Session');
-				$arrSession = $this->Session->getData();
-				
-				if(!count($arrSession['catalog_notelist'])) return $strContent;
-				
+				return;
+			}
+			
+			// Update amount
+			if(isset($_REQUEST['UPDATE_NOTELIST_ITEM']))
+			{
 				foreach($arrSession['catalog_notelist'][$catid] as $index => $entry)
 				{
 					if($entry['id'] == $itemid)
@@ -56,14 +67,9 @@ class CatalogListNotelistHelper extends Frontend
 				}
 			}
 			
-			// REMOVE ITEM
-			if(isset($_REQUEST['remove_'.$catid.'_'.$itemid]))
+			// remove item
+			if(isset($_REQUEST['REMOVE_NOTELIST_ITEM']))
 			{
-				$this->import('Session');
-				$arrSession = $this->Session->getData();
-				
-				if(!count($arrSession['catalog_notelist'])) return $strContent;
-				
 				foreach($arrSession['catalog_notelist'][$catid] as $index => $entry)
 				{
 					if($entry['id'] == $itemid)
@@ -73,13 +79,16 @@ class CatalogListNotelistHelper extends Frontend
 				}
 			}
 			
-			
-			// update session and clear form_submit
+			// update session and 
 			$this->Session->setData($arrSession);
-			unset($_POST['FORM_SUBMIT']);
+			
+			// clear
+			$this->Input->setPost('CATALOG', '');
+			$this->Input->setPost('CATALOG_ITEM', '');
+			
+			// reload
+			$this->reload();
 		}
-	
-		return $strContent;
 	}
 }
 

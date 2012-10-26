@@ -21,9 +21,9 @@
  * Software Foundation website at <http://www.gnu.org/licenses/>.
  *
  * PHP version 5
- * @copyright  Tim Gatzky 2011, Catalog Team 
+ * @copyright  Tim Gatzky 2011 
  * @author     Tim Gatzky <info@tim-gatzky.de>
- * @package    Catalog 
+ * @package    catalognotelist_cataloglist
  * @license    LGPL 
  * @filesource
  */
@@ -49,6 +49,23 @@ $GLOBALS['TL_DCA']['tl_module']['fields']['catalognotelist_catalogs'] = array
 	'eval'					=> array('mandatory'=> false, 'submitOnChange'=> true, 'multiple'=> true ),
 );
 	
+$GLOBALS['TL_DCA']['tl_module']['fields']['catalognotelist_imagemain_field'] = array
+(
+	'label'                   => &$GLOBALS['TL_LANG']['tl_module']['catalog_imagemain_field'],
+	'exclude'                 => true,
+	'inputType'               => 'select',
+	'options_callback'        => array('tl_module_cataloglist_notelist', 'getImageFields'),
+	'eval'                    => array('includeBlankOption' => true, 'multiple' => true)
+);
+
+$GLOBALS['TL_DCA']['tl_module']['fields']['catalognotelist_imagegallery_field'] = array
+(
+	'label'                   => &$GLOBALS['TL_LANG']['tl_module']['catalog_imagegallery_field'],
+	'exclude'                 => true,
+	'inputType'               => 'select',
+	'options_callback'        => array('tl_module_cataloglist_notelist', 'getGalleryFields'),
+	'eval'                    => array('includeBlankOption' => true, 'tl_class' => 'clr w50', 'multiple' => true)
+);
 
 
 class tl_module_cataloglist_notelist extends Backend
@@ -62,14 +79,13 @@ class tl_module_cataloglist_notelist extends Backend
 		$objModule = $this->Database->prepare("SELECT type FROM tl_module WHERE id=?")
 									->limit(1)
 									->execute($dc->id);
-									
+		
 		if($objModule->type == 'cataloglist_notelist')
 		{
+			$GLOBALS['TL_DCA']['tl_module']['subpalettes']['catalog_thumbnails_override'] = str_replace('catalog_imagemain_field','catalognotelist_imagemain_field',$GLOBALS['TL_DCA']['tl_module']['subpalettes']['catalog_thumbnails_override']);
+			$GLOBALS['TL_DCA']['tl_module']['subpalettes']['catalog_thumbnails_override'] = str_replace('catalog_imagegallery_field','catalognotelist_imagegallery_field',$GLOBALS['TL_DCA']['tl_module']['subpalettes']['catalog_thumbnails_override']);
+			
 			$GLOBALS['TL_DCA']['tl_module']['fields']['catalog_visible']['options_callback'] = array('tl_module_cataloglist_notelist', 'getCatalogFields');
-			$GLOBALS['TL_DCA']['tl_module']['fields']['catalog_imagemain_field']['options_callback'] = array('tl_module_cataloglist_notelist', 'getImageFields');
-			$GLOBALS['TL_DCA']['tl_module']['fields']['catalog_imagemain_field']['eval']['multiple'] = true;
-			$GLOBALS['TL_DCA']['tl_module']['fields']['catalog_imagegallery_field']['options_callback'] = array('tl_module_cataloglist_notelist', 'getGalleryFields');
-			$GLOBALS['TL_DCA']['tl_module']['fields']['catalog_imagegallery_field']['eval']['multiple'] = true;
 			$GLOBALS['TL_DCA']['tl_module']['fields']['catalog_islink']['options_callback'] = array('tl_module_cataloglist_notelist', 'getCatalogFields');
 		}
 		

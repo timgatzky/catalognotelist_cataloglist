@@ -21,423 +21,488 @@
  * Software Foundation website at <http://www.gnu.org/licenses/>.
  *
  * PHP version 5
- * @copyright  Tim Gatzky 2011 
+ * @copyright  Tim Gatzky 2012
  * @author     Tim Gatzky <info@tim-gatzky.de>
- * @package    Catalog 
+ * @package    catalognotelist_cataloglist 
  * @license    LGPL 
  * @filesource
  */
 
 
-class ModuleCatalogListNotelist extends ModuleCatalog
+class ModuleCatalogListNotelist extends ModuleCatalogList
 {
+	/**
+	 * @var
+	 */
+	protected $totalAll = 0;
+	protected $countCatalogs = 0;
+	protected $countEntries = 0;
+	
 	/**
 	 * Template
 	 */
 	protected $strTemplate = 'mod_cataloglist_notelist';
+		
 	
 	/**
-	 * BE Wildcard
+	 * Generate Module
 	 */
 	public function generate()
 	{
-				
 		if (TL_MODE == 'BE')
 		{
 			$objTemplate = new BackendTemplate('be_wildcard');
 			
-			if ($GLOBALS['TL_LANGUAGE'] == 'de')
-			{
-				$objTemplate->wildcard  = "### KATALOG-MERKLISTE ###";
-			}
-			else
-			{
-			  	$objTemplate->wildcard  = "### CATALOG-NOTELISTE ###";
-			}
-			
+			$objTemplate->wildcard  = $GLOBALS['TL_LANG']['CATALOGLIST_NOTELIST']['WILDCARD'];
 			$objTemplate->title = $this->headline;
 			$objTemplate->id = $this->id;
 			$objTemplate->link = $this->name;
 			if (version_compare(VERSION.'.'.BUILD, '2.9.0', '>='))
+			{
 				$objTemplate->href = 'contao/main.php?do=themes&amp;table=tl_module&amp;act=edit&amp;id=' . $this->id;
+			}	
 			else
+			{
 				$objTemplate->href = 'typolight/main.php?do=modules&amp;act=edit&amp;id=' . $this->id;
+			}
+			
 			return $objTemplate->parse();
 		}
 		
-		// Fallback template
-		if (!strlen($this->catalog_layout))
-			$this->catalog_layout = $this->strTemplate;
 		
-		$this->strTemplate = $this->catalog_layout;
+		// Handle multiple catalogs:
+		$arrCatalogs = deserialize($this->catalognotelist_catalogs);
+		$arrNotelist = $this->Session->get('catalog_notelist');
 		
-		
-		$this->catalognotelist_visible = deserialize($this->catalognotelist_visible);
-		$this->catalognotelist_catalogs = deserialize($this->catalognotelist_catalogs); 	
-		$this->catalog_visible = $this->catalognotelist_visible;
-		
-		$this->import('Catalog');
-		foreach($this->catalognotelist_catalogs as $catalog)
+		// throw out catalogs selected but empty in notelist 
+		$tmp = array();
+		foreach($arrCatalogs as $i => $catalog)
 		{
-			$objFields = $this->Database->prepare("SELECT id, name, tableName, aliasField FROM tl_catalog_types WHERE id=?")
-							->execute($catalog);
-			if(!$objFields->numRows) return;
-			
-			$this->strTable = $objFields->tableName;
-			$this->catalog = $catalog;
-		 	
-		 	// Run routine from Catalog.php for each catalog in the list to get the current DCA
-		 	
-			// get DCA
-			$objCatalog = $this->Database->prepare('SELECT * FROM tl_catalog_types WHERE id=?')
-					->limit(1)
-					->execute($this->catalog);
-			
-			if ($objCatalog->numRows > 0 && $objCatalog->tableName)
+			if(count($arrNotelist[$catalog]))
 			{
-				$this->strTable = $objCatalog->tableName;
-				$this->strAliasField=$objCatalog->aliasField;
-				$this->publishField=$objCatalog->publishField;
-				 
-				// dynamically load dca for catalog operations
-				$this->Import('Catalog');
-				if(!$GLOBALS['TL_DCA'][$objCatalog->tableName]['Cataloggenerated'])
-				{
-					// load default language
-					$GLOBALS['TL_LANG'][$objCatalog->tableName] = is_array($GLOBALS['TL_LANG'][$objCatalog->tableName])
-														 ? self::array_replace_recursive($GLOBALS['TL_LANG']['tl_catalog_items'], $GLOBALS['TL_LANG'][$objType->tableName])
-														 : $GLOBALS['TL_LANG']['tl_catalog_items'];
-					// load dca
-					$GLOBALS['TL_DCA'][$objCatalog->tableName] = 
-						is_array($GLOBALS['TL_DCA'][$objCatalog->tableName])
-							? Catalog::array_replace_recursive($this->Catalog->getCatalogDca($this->catalog), $GLOBALS['TL_DCA'][$objCatalog->tableName])
-							: $this->Catalog->getCatalogDca($this->catalog);
-					$GLOBALS['TL_DCA'][$objCatalog->tableName]['Cataloggenerated'] = true;
-				}
+				$tmp[] = $catalog;
+			}
+		}
+		$arrCatalogs = $tmp;
+		unset($tmp);
+		
+		// nothing to show: return compiled
+		if(!count($arrCatalogs))
+		{
+			$this->catalog = 0;
+			return parent::generate();
+		}
+		
+		// get visible fields
+		$arrVisibles = $this->getVisibles();
+		
+		// get linked fields
+		$arrIsLink = array();
+		if($this->catalog_link_override)
+		{
+			$arrIsLink = $this->getLinkedFields();
+		}
+		
+		// get image override fields
+		$arrImages = array();
+		if($this->catalog_thumbnails_override)
+		{
+			if($this->catalognotelist_imagemain_field)
+			{
+				$arrImages = $this->getImageFields();
+			}
+			if($this->catalognotelist_imagegallery_field)
+			{
+				$arrGallery = $this->getGalleryFields();
 			}
 		}
 		
+		// count all notelist entries
+		foreach($arrNotelist as $c)
+		{
+			foreach($c as $e)
+			{
+				$this->countEntries += 1;
+			}
+		}
 		
-		return parent::generate();
+		$this->countCatalogs = count($arrCatalogs);
+		
+		// generate module for each catalog selected
+		for($i=0; $i < count($arrCatalogs); $i++)
+		{
+			$this->catalog = $arrCatalogs[$i];
+			$this->catalog_visible = $arrVisibles[$this->catalog];
+			$this->catalog_islink = $arrIsLink[$this->catalog];
+			$this->catalog_imagemain_field = $arrImages[$this->catalog];
+			$this->catalog_imagegallery_field = $arrGallery[$this->catalog];
+			$this->total = $this->countEntries;
+			
+			if($i > 0)
+			{
+				$this->headline = '';
+				$this->total = '';
+			}
+									
+			// Append summary at the end
+			if($i == count($arrCatalogs)-1)
+			{
+				$this->summary = true;
+			}
+			
+			// generate
+			$strBuffer .= parent::generate();
+		}
+		
+		return $strBuffer;
 	}
 	
 		
 	/**
-	 * Generate module, make non-abstract
+	 * Generate module
 	 */
 	protected function compile()
 	{
-		$arrCatalogs = deserialize($this->catalognotelist_catalogs); 	// list of all catalogs (id) selected by the user
-		#$arrVisibles = deserialize($this->catalognotelist_visible); 	// list of all fields selected by the user
+		$arrNotelist = $this->Session->get('catalog_notelist');
 		
-		// Imports
-		$this->import('Database');
-		$this->import('Session');
-		
-		// Collect session data
-		$arrSessionData = $this->Session->getData();
-		$arrNotelist = $arrSessionData['catalog_notelist'];
-		
-		// parse empty template if notelist is not created yet
-		if(!$arrNotelist || !count($arrNotelist))
+		// notelist is empty
+		if( !count($arrNotelist) || !$this->catalog )
 		{
 			$objTemplate = new FrontendTemplate($this->catalog_template);
+			$objTemplate->empty = $GLOBALS['TL_LANG']['MSC']['CATALOGNOTELIST_CATALOGLIST']['empty'];
 			$objTemplate->entries = array();
 			$this->Template->catalog = $objTemplate->parse();
-			$this->Template->total = 0;
-		
+			
 			return;
 		} 
 		
-		// clean up
-		foreach($arrNotelist as $catid => $values)
+		// create WHERE clause for sql query
+		$strWhere = '';
+		
+		$arrItems = array();
+		foreach($arrNotelist[$this->catalog] as $entry)
 		{
-			// check if catalog is unchecked in module settings but still in notelist
-			if(!in_array($catid, $arrCatalogs)) unset($arrNotelist[$catid]);
-			// check if catalog is checked in module but empty in notelist
-			if(!count($values)) unset($arrNotelist[$catid]);
+			$arrItems[] = $entry['id'];
 		}
 		
-		// parse empty template if notelist was created but contains no items
-		if(!$arrNotelist || !count($arrNotelist))
+		$strWhere = 'id IN('.implode(',', $arrItems).')';
+				
+		// fetch catalog items
+		$objCatalog = $this->fetchCatalogItems($this->catalog_visible,$strWhere);
+		
+		if(!$objCatalog->numRows)
 		{
-			$objTemplate = new FrontendTemplate($this->catalog_template);
-			$objTemplate->entries = array();
-			$this->Template->catalog = $objTemplate->parse();
-			$this->Template->total = 0;
 			return;
 		}
-				
-//---------------------------------------------------------------------------------
 		
-		$this->Template->catalog = ''; // clear template
+		// generate catalog
+		$arrCatalog = $this->generateCatalog($objCatalog, true, $this->catalog_visible, true);
 		
-		// collect information about the selected catalogs
-		$objFields = $this->Database->prepare("SELECT id, name, tableName, aliasField FROM tl_catalog_types WHERE id IN(" . implode(',', deserialize($this->catalognotelist_catalogs)) . ")")
-						->execute();
-		if(!$objFields->numRows) return;
-		
-		$arrTables = array();
-		while($objFields->next() )
+		// overwrite single image fields
+		if($this->catalog_thumbnails_override && count($this->catalog_imagemain_field) > 0)
 		{
-			$arrTables[$objFields->id] = array (
-				'strTable' 		=> $objFields->tableName,
-				'aliasField'	=> $objFields->aliasField,
-				'name'			=> $objFields->name
-			);
-			$this->strTable = $objFields->tableName;
-			$this->strAliasField = $objFields->aliasField;
+			$arrCatalog = $this->getSingleImageThumbnails($arrCatalog);
 		}
-
-//--
 		
-		// local members
-		$arrEntries = array();
-		$arrCatalogFields = array();
-		$arrEntryIds = array();
-		$arrAmount = array();
-		$arrVisibles = array();	
-		$total = 0;
-		$index = 0;
-		$totalAmount = 0;
-		foreach($arrNotelist as $catid => $notelistValues)
+		// overwrite gallery fields
+		if($this->catalog_thumbnails_override && count($this->catalog_imagegallery_field) > 0)
 		{
-			// get ids of entries that should be displayed
-			foreach($notelistValues as $value)
+			$arrCatalog = $this->getGalleryThumbnails($arrCatalog);
+		}
+		
+		// add current amount for each item
+		foreach($arrCatalog as $i => $entry)
+		{
+			foreach($arrNotelist[$this->catalog] as $notelistEntry)
 			{
-				$arrEntryIds[$catid][]				= $value['id'];
-				$arrAmount[$catid][$value['id']]	= $value['amount'];
-			}
-			
-			$objFields = $this->Database->prepare("SELECT * FROM " .$arrTables[$catid]['strTable']. " WHERE pid=?")
-							->limit(1)
-							->execute($catid)
-							->fetchAssoc(); // @return array
-			if(!$objFields || !count($objFields)) return;
-			
-			/**
-			 * workaround for duplicate field names in different catalogs
-			 */
-			
-			// seperate colName from checkbox value
-			$arrVisibles = $this->getColNameFromArray(deserialize($this->catalognotelist_visible));
-			
-			// create unique list of visible fields for the current catalog
-			$arrVisibles = array();
-			$name = $arrTables[$catid]['name'];
-			foreach(deserialize($this->catalognotelist_visible) as $field)
-			{
-				$catName = $this->getNameFromArray(array($field));
-				$cols = array_unique($this->getColNameFromArray(array($field)));
-				
-				if(strstr($catName[0], $name))
+				if($entry['id'] == $notelistEntry['id'])
 				{
-					$arrVisibles[$catid][] = $cols[0];
-				}
-			}	
-			
-			// kick duplicated field names out to minimize the sql query
-			$arrCatalogFields[$catid] = array_intersect(array_unique($arrVisibles[$catid]), array_keys($objFields));
-
-//--
-			
-			// create unique link overwrite list for the current catalog
-			$arrIsLink = array();
-			$name = $arrTables[$catid]['name'];
-			
-			if($this->catalognotelist_link_override)
-			{
-				foreach(deserialize($this->catalognotelist_islink) as $field)
-				{
-					$catName = $this->getNameFromArray(array($field));
-					$cols = array_unique($this->getColNameFromArray(array($field)));
+					$arrCatalog[$i]['amount'] = $notelistEntry['amount'];
 					
-					if(strstr($catName[0], $name))
-					{
-						$arrIsLink[$catid][] = $cols[0];
-					}
-				
-				}	
-			}
-//--
-			
-			// overwrite cataloglist process variables
-			$this->strTable = $arrTables[$catid]['strTable'];
-			$this->strAliasField = $arrTables[$catid]['aliasField'];
-			$this->catalog_visible = $arrCatalogFields[$catid];
-			$this->catalog = $catid;
-			$this->catalog_link_override = $this->catalognotelist_link_override;
-			$this->catalog_islink = $arrIsLink[$catid];
-			
-			// create sql query array
-			$arrQuery = $this->processFieldSQL($arrCatalogFields[$catid]);
-			
-			// need alias to let catalog generate the url to the reader site. will be kicked out later.
-			if($this->strAliasField)
-				$arrQuery[] = $this->strAliasField;
-			
-			$objCatalogStmt = $this->Database->prepare("SELECT " .implode(',',$this->systemColumns). "," .implode(',',$arrQuery).", (SELECT name FROM tl_catalog_types WHERE tl_catalog_types.id=".$this->strTable.".pid) AS catalog_name, (SELECT jumpTo FROM tl_catalog_types WHERE tl_catalog_types.id=".$this->strTable.".pid) AS parentJumpTo".
-					" FROM " .$this->strTable.
-					" WHERE id IN(" .implode(',', $arrEntryIds[$catid]). ")".
-					" ORDER BY sorting") ;
-			
-			$objCatalog = $objCatalogStmt->execute(); // fire sql
-			
-			// total
-			$total += $objCatalog->numRows;
-			
-			// generate items of each catalog
-			// @return array -> of all items in each catalog
-			$entries = $this->generateCatalog($objCatalog, true, $this->catalog_template, $arrCatalogFields[$catid]);
-			$arrEntries[$catid] = $entries;
-			
-			// kick out alias field if not in visibles list
-			if(!in_array($this->strAliasField, $arrCatalogFields[$catid]))
-				foreach($entries as $index => $entry)
-					unset($arrEntries[$catid][$index]['data'][$this->strAliasField]);
-				
-			
-			// amount
-			foreach($entries as $index => $entry)
-			{
-				$id = $entry['id'];
-				$amount = $arrAmount[$catid][$id];
-				$arrEntries[$catid][$index]['amount'] = $amount;
-				$totalAmount += $amount;
-			}
+					// sum up amount
+					$this->totalAll += $notelistEntry['amount'];
 					
-			// Overrite image settings
-			if($this->catalognotelist_thumbnails_override)
-			{
-				// seperate colName from checkbox value
-				$arrImageFields = $this->getColNameFromArray(deserialize($this->catalognotelist_imagemain_field));
-				
-				foreach($entries as $index => $entry)
-				{
-					foreach($arrImageFields as $imageField)
-					{
-						if(array_key_exists($imageField, $entry['data']) && strlen($entry['data'][$imageField]['raw']))
-						{
-							$raw = $entry['data'][$imageField]['raw'];
-							$size = deserialize($this->catalognotelist_imagemain_size);
-							$lightbox = $this->catalognotelist_imagemain_fullsize;
-							$src = $this->getImage($raw, $size[0], $size[1], $size[2]);
-							
-							// modify value string with new data
-							$value = $entry['data'][$imageField]['value'];
-							
-							// replace src
-							$value = preg_replace('/<img.*src="(.*?)"/', '<img src="'.$src.'" ', $value); 
-							// replace size
-							$value = preg_replace('/width="(.*?)" height="(.*?)"/', 'width="'.$size[0].'" height="'.$size[1].'" ', $value);
-							
-							if($lightbox)
-							{
-								$value = preg_replace('/rel="(.*?)"/', 'rel="lightbox"', $value);
-							}
-							else
-							{
-								/*preg_replace( '/<img.*src="(.*?)".*?>/', '<a href="\1">Image file</a>', $str );*/
-								$value = preg_replace('/<a.*rel="(.*?)".*?>/', '', $value);
-								$value = str_replace('</a>','', $value);
-							}
-							
-							// update meta
-							$entry['data'][$imageField]['meta'][0]['src'] = $src;
-							$entry['data'][$imageField]['meta'][0]['w'] = $size[0];
-							$entry['data'][$imageField]['meta'][0]['h'] = $size[1];
-							$entry['data'][$imageField]['meta'][0]['wh'] = 'width="' .$size[0]. '" height="' .$size[1]. '"';
-							
-							// update entries array
-							$arrEntries[$catid][$index]['data'][$imageField]['value'] = $value;
-							
-						}
-					}
+					// count entries
+					$this->totalEntries += 1;
 				}
 			}
-			
-			
-			
-		} // endforeach
-		
+		}
 					
-			
-			
-					
-/**
- * work with Christian Schifflers FormCatalogNotelist
- * to create a form for each notelist item
- * => didn`t work out well, I couldn't get it to update the page
- */
-		//$objFormCatalogNoteList = new FormCatalogNoteList(false); 
-		//$objFormCatalogNoteList->catalog_visible = $arrCatalogFields[$catid];
-		//$objFormCatalogNoteList->catalog = $catid;
-		//$objFormCatalogNoteList->strTable = $this->strTable;
-		//$objFormCatalogNoteList->strId = $this->id;
-		//$objFormCatalogNoteList->id = $this->id;
-		//$strFormTemplate = $objFormCatalogNoteList->calculateValue(false);
-		//$index++;
-		//$objTemplate->formnotelist .= $strFormTemplate;
 		
-		// generate template
+		// Template vars
+		$this->Template->catalogId = $this->catalog;
+		#$this->Template->total = $this->totalEntries;
+		
+		$this->Template->labelTotal = $GLOBALS['TL_LANG']['MSC']['CATALOGNOTELIST_CATALOGLIST']['label_total'];
+		$this->Template->labelCatalogs = $GLOBALS['TL_LANG']['MSC']['CATALOGNOTELIST_CATALOGLIST']['label_catalogs'];
+		$this->Template->labelEntries = $GLOBALS['TL_LANG']['MSC']['CATALOGNOTELIST_CATALOGLIST']['label_entries'];
+		
+		$this->Template->totalAll = $this->totalAll;
+		$this->Template->countCatalogs = $this->countCatalogs;
+		$this->Template->countEntries = $this->totalEntries;
+		
+		// catalog entries template
 		$objTemplate = new FrontendTemplate($this->catalog_template);
-		$objTemplate->entries = $arrEntries;
-		
-		// catalog template vars
-		$this->Template->total = $total;
-			
-		// catalog layout template vars
-		$objTemplate->totalAmount = $totalAmount;
-		$objTemplate->catalogCount = count($arrNotelist);
-		$objTemplate->entriesCount = $total;
+		$objTemplate->entries = $arrCatalog;
 		
 		// form vars
 		$objTemplate->totalItems = $total;
 		$objTemplate->totalAmount = $totalAmount;
 		$objTemplate->action = $this->Environment->request;
-		$objTemplate->label_amount = $GLOBALS['TL_LANG']['MSC']['catalognotelist_cataloglist']['label_amount'];
-		$objTemplate->updateAmount = $GLOBALS['TL_LANG']['MSC']['catalognotelist_cataloglist']['updateAmount'];
-		$objTemplate->remove = $GLOBALS['TL_LANG']['MSC']['catalognotelist_cataloglist']['remove'];
+		$objTemplate->update = $GLOBALS['TL_LANG']['MSC']['CATALOGNOTELIST_CATALOGLIST']['submit_update'];
+		$objTemplate->remove = $GLOBALS['TL_LANG']['MSC']['CATALOGNOTELIST_CATALOGLIST']['submit_remove'];
 		
 		// parse template
 		$this->Template->catalog = $objTemplate->parse();
-										
+							
 	}
-
+	
 	
 	/**
-	 * Substrings the values of the catalog visibles list to get the colName value and returns them as an array
-	 * @return @array
+	 * Overwrite single image fields and return catalog array
+	 * @param array
+	 * @return array
 	 */
-	public function getColNameFromArray($array)
+	protected function getSingleImageThumbnails($arrCatalog)
 	{
-		$arrReturn = array();
-		foreach($array as $value)
+		$size = deserialize($this->catalog_imagemain_size);
+		
+		foreach($arrCatalog as $i => $catalog)
 		{
-			$value = str_replace(' ', '', $value);
-			$begin = strpos($value, '"')+1;
-			$end = strrpos($value, '"');
-			$return = substr($value, $begin, $end - $begin);
-			$arrReturn[] = $return;
+			$url = $catalog['url'];
+			foreach($this->catalog_imagemain_field as $field)
+			{
+				// skip if field is not visible
+				if(!in_array($field, $this->catalog_visible))
+				{
+					continue;
+				}
+				
+				$isLink = false;
+				if(in_array($field, $this->catalog_islink) || $this->catalog_imagemain_fullsize)
+				{
+					$isLink = true;
+				}
+				
+				$src = $catalog['data'][$field]['raw'];
+				$image = $this->getImage($src, $size[0], $size[1], $size[2]);
+				$imageHtml = $this->replaceInsertTags('{{image::'.$image.'}}');
+				
+				$arrClass = preg_match('/class="(.*?)\"/', $catalog['data'][$field]['value'],$result);
+				$class = $result[1];
+				
+				$value = '';
+				if($isLink)
+				{
+					$lb = '';
+					$href = $url;
+					//lightbox / fullscreen
+					if($this->catalog_imagemain_fullsize)
+					{
+						$lb = 'data-lightbox="group:notelist_'.$catalog['pid'].'_'.$catalog['id'].'_single;"';
+						$href = $src;
+					}
+					$value = sprintf('<a class="%s" href="%s" title="%s" %s >%s</a>',
+						$class,
+						$href,
+						$href,
+						$lb,
+						$imageHtml
+					);
+				}
+				else
+				{
+					$value = sprintf('<span class="%s">%s</span>',$class,$imageHtml);
+				}
+				
+				// write catalog
+				
+				$arrCatalog[$i]['data'][$field]['value'] = $value; 
+				$arrCatalog[$i]['data'][$field]['meta'][0]['src'] = $image;
+				$arrCatalog[$i]['data'][$field]['meta'][0]['w'] = $size[0];
+				$arrCatalog[$i]['data'][$field]['meta'][0]['h'] = $size[0];
+				$arrCatalog[$i]['data'][$field]['meta'][0]['wh'] = 'width="'.$size[0].'" height="'.$size[1].'"';
+			}
 		}
+		
+		return $arrCatalog;
+	}
+	
+	
+	/**
+	 * Overwrite gallery images and return catalog array
+	 * @param array
+	 * @return array
+	 */
+	protected function getGalleryThumbnails($arrCatalog)
+	{
+		$size = deserialize($this->catalog_imagegallery_size);
+		
+		foreach($arrCatalog as $i => $catalog)
+		{
+			$url = $catalog['url'];
+			
+			foreach($this->catalog_imagegallery_field as $field)
+			{
+				// skip if field is not visible
+				if(!in_array($field, $this->catalog_visible))
+				{
+					continue;
+				}
+				
+				$isLink = false;
+				if(in_array($field, $this->catalog_islink) || $this->catalog_imagegallery_fullsize)
+				{
+					$isLink = true;
+				}
+				
+				$arrSrc = deserialize($catalog['data'][$field]['files']);
+				
+				// field class
+				$arrClass = preg_match('/class="(.*?)\"/', $catalog['data'][$field]['value'],$result);
+				$class = $result[1];
+				
+				$arrImageValue = array();
+				
+				foreach($arrSrc as $imgIndex => $src)
+				{
+					$image = $this->getImage($src, $size[0], $size[1], $size[2]);
+					$imageHtml = $this->replaceInsertTags('{{image::'.$src.'?width='.$size[0].'&height='.$size[1].'&crop='.$size[2].'}}');
+					
+					// classes
+					$arrImageClass = array('image');
+					if($imgIndex < 1) $arrImageClass[] = 'first';
+					if($imgIndex >= count($arrSrc)-1) $arrImageClass[] = 'last';
+					$imgIndex%2 == 0 ? $arrImageClass[] = ' even' : $arrImageClass[] = ' odd'; // even/odd
+					
+					if($isLink)
+					{
+						$lb = '';
+						$href = $url;
+						//lightbox / fullscreen
+						if($this->catalog_imagegallery_fullsize)
+						{
+							$lb = 'data-lightbox="group:notelist_'.$catalog['pid'].'_'.$catalog['id'].'_multi;"';
+							$href = $src;
+						}
+						$arrImageValue[] = sprintf('<a class="%s" href="%s" title="%s" %s >%s</a>',
+							implode(' ',$arrImageClass),
+							$href,
+							$href,
+							$lb,
+							$imageHtml
+						);
+					}
+					else
+					{
+						$arrImageValue[] = sprintf('<span class="%s">%s</span>',implode(' ',$arrImageClass),$imageHtml);
+					}
+					
+					// write meta
+					$arrCatalog[$i]['data'][$field]['meta'][$imgIndex]['src'] = $image;
+					$arrCatalog[$i]['data'][$field]['meta'][$imgIndex]['w'] = $size[0];
+					$arrCatalog[$i]['data'][$field]['meta'][$imgIndex]['h'] = $size[0];
+					$arrCatalog[$i]['data'][$field]['meta'][$imgIndex]['wh'] = 'width="'.$size[0].'" height="'.$size[1].'"';
+				}
+				
+				// write catalog
+				$value = sprintf('<span class="%s">%s</span>',$class,implode('',$arrImageValue));
+				
+				$arrCatalog[$i]['data'][$field]['value'] = $value;
+			}
+		}
+		
+		return $arrCatalog;
+	}
+	
+	/**
+	 * Get catalog fields as an array listed by the catalog id
+	 * @param array
+	 * @return array
+	 */
+	protected function getCatalogConformFields($arrInput)
+	{
+		if(!isset($arrInput))
+		{
+			return array();
+		}
+		
+		$arrReturn = array();
+		// seperate visible fields and them list by catalog id
+		foreach(deserialize($this->catalognotelist_catalogs) as $catalog)
+		{
+			foreach(deserialize($arrInput) as $visible)
+			{
+				$split = explode('_', $visible);
+				$catId = $split[0];
+				$fieldId = $split[1];
+				$colName = $split[2];
+				
+				// handle column names with underscore
+				$arrParts = array();
+				if(count($split) > 3)
+				{
+					foreach($split as $i => $part)
+					{
+						if($i < 2) continue;
+						
+						$arrParts[] = $part;
+					}
+					$colName = implode('_', $arrParts);
+				}
+				
+				if($catId == $catalog)
+				{
+					$arrReturn[$catalog][] = $colName;
+				}				
+			}
+		}
+		
 		return $arrReturn;
 	}
-
-	public function getNameFromArray($array)
+	
+	/**
+	 * Get visible catalog fields as an array listed by the catalog id
+	 * @param array
+	 * @return array
+	 */
+	protected function getVisibles()
 	{
-		$arrReturn = array();
-		foreach($array as $value)
-		{
-			$value = str_replace(' ', '', $value);
-			$begin = 0;
-			$end = strpos($value, ':' , 1);
-			$return = substr($value, $begin, $end - $begin);
-			$arrReturn[] = $return;
-		}
-		return $arrReturn;
+		return self::getCatalogConformFields($this->catalog_visible);
 	}
-
-
+	
+	/**
+	 * Get fields linked to the entry as an array listed by the catalog id
+	 * @param array
+	 * @return array
+	 */
+	protected function getLinkedFields()
+	{
+		return self::getCatalogConformFields($this->catalog_islink);
+	}
+	
+	
+	/**
+	 * Get image fields as an array listed by the catalog id
+	 * @param array
+	 * @return array
+	 */
+	protected function getImageFields()
+	{
+		return self::getCatalogConformFields($this->catalognotelist_imagemain_field);
+	}
+	
+	/**
+	 * Get gallery fields as an array listed by the catalog id
+	 * @param array
+	 * @return array
+	 */
+	protected function getGalleryFields()
+	{
+		return self::getCatalogConformFields($this->catalognotelist_imagegallery_field);
+	}
+	
+	
 }
 
 
