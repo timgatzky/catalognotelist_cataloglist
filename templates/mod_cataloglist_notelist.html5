@@ -2,18 +2,28 @@
 <?php if (!$this->searchable): ?>
 <!-- indexer::stop -->
 <?php endif; ?>
-<div class="<?php echo $this->class; ?> notelist block"<?php echo $this->cssID; ?><?php if ($this->style): ?> style="<?php echo $this->style; ?>"<?php endif; ?>>
+<div class="<?php echo $this->class; ?> notelist_<?php echo $this->catalogId; ?> block"<?php echo $this->cssID; ?><?php if ($this->style): ?> style="<?php echo $this->style; ?>"<?php endif; ?>>
 <?php if ($this->headline): ?>
 
 <<?php echo $this->hl; ?>><?php echo $this->headline; ?></<?php echo $this->hl; ?>>
 <?php endif; ?>
-<div class="total">Total: <?php echo $this->total; ?></div>
 
-<?php if ($this->editEnable): ?>
-<div class="addUrl"><a href="<?php echo $this->addUrl; ?>">Add New Item</a></div>
+<?php if($this->total): ?>
+<div class="total">Total: <?php echo $this->total; ?></div>
 <?php endif; ?>
 
 <?php echo $this->catalog; ?>
+
+<?php if($this->summary): ?>
+<div class="summary">
+<ul>
+<li class="total_amount"><span class="label"><?php echo $this->labelTotal; ?><span class="value"><?php echo $this->totalAll; ?></span></li>
+<li class="count_catalog"><span class="label"><?php echo $this->labelCatalogs; ?><span class="counter"><?php echo $this->countCatalogs; ?></span></li>
+<li class="count_entries"><span class="label"><?php echo $this->labelEntries; ?><span class="counter"><?php echo $this->countEntries; ?></span></li>
+</ul>
+</div>
+<?php endif; ?>
+
 <?php echo $this->pagination; ?>
 
 </div>

@@ -7,11 +7,28 @@
 
 <?php if (count($this->entries)): ?>
 
-<?php foreach($this->entries as $catalog => $entries): ?>
-<div class="layout_simple notelist catalog_<?php echo $catalog; ?> block">
-<?php foreach ($entries as $entry): ?>
+<div class="layout_simple notelist block">
+<?php foreach ($this->entries as $entry): ?>
+
+<?php #fix: if no pid/catalog id parsed to entry
+if(empty($entry['pid']))
+{
+	$this->import('Database');
+	$objCatalog = $this->Database->prepare("SELECT id FROM tl_catalog_types WHERE tableName=?")->limit(1)->execute($entry['tablename']);
+	$entry['pid'] = $objCatalog->id;
+}
+?>
 <div class="item<?php echo $entry['class'] ? ' '.$entry['class'] : ''; ?>">
-	<div class="amount">Anzahl: <span class="counter"><?php echo $entry['amount']; ?></span></div>
+	
+	<div class="amount"><?php echo $GLOBALS['TL_LANG']['MSC']['CATALOGNOTELIST_CATALOGLIST']['label_amount']; ?><?php echo $entry['amount']; ?></div>
+	
+	<?php if(count($entry['user'])): ?>
+	<ul class="userlist">
+		<?php foreach($entry['user'] as $user): ?>
+		<li class="user user<?php echo $user['id']; ?>"><?php echo $user['username']; ?></li>
+		<?php endforeach; ?>
+	</ul>
+	<?php endif; ?>
 	
 	<?php foreach ($entry['data'] as $field=>$data): ?>
 	<?php if (strlen($data['raw']) && !in_array($field, array('catalog_name','parentJumpTo'))): ?>
@@ -34,14 +51,13 @@
 	<div class="ce_form formnotelist">
 		<form method="post" enctype="application/x-www-form-urlencoded" id="form_catalognotelist_<?php echo $catalog.'_'.$entry['id']; ?>" action="<?php echo $this->action; ?>">	
 		<input type="hidden" name="FORM_SUBMIT" value="form_catalognotelist_<?php echo $catalog.'_'.$entry['id']; ?>" />
-		<input type="hidden" name="catid" value="<?php echo $catalog; ?>" />
-		<input type="hidden" name="itemid" value="<?php echo $entry['id']; ?>" />
-		<input type="hidden" name="totalitems" value="<?php echo $this->totalItems; ?>" />
-		<input type="hidden" name="totalamount" value="<?php echo $this->totalAmount; ?>" />
+		<input type="hidden" name="REQUEST_TOKEN" value="{{request_token}}"/>
+		<input type="hidden" name="CATALOG" value="<?php echo $entry['pid']; ?>" />
+		<input type="hidden" name="CATALOG_ITEM" value="<?php echo $entry['id']; ?>" />
 		<div class="submit_container">
-			<input type="text" class="submit amount" name="amount_<?php echo $catalog.'_'.$entry['id']; ?>" value="<?php echo $entry['amount']; ?>">
-			<input type="submit" class="submit update" name="update_<?php echo $catalog.'_'.$entry['id']; ?>" value="<?php echo $this->updateAmount; ?>">		
-			<input type="submit" class="submit remove" name="remove_<?php echo $catalog.'_'.$entry['id']; ?>" value="<?php echo $this->remove; ?>">	
+			<input type="text" class="submit amount" name="AMOUNT_NOTELIST_ITEM" value="<?php echo $entry['amount']; ?>">
+			<input type="submit" class="submit update" name="UPDATE_NOTELIST_ITEM" value="<?php echo $this->update; ?>">		
+			<input type="submit" class="submit remove" name="REMOVE_NOTELIST_ITEM" value="<?php echo $this->remove; ?>">	
 		</div>
 		</form>
 	</div>
@@ -49,15 +65,7 @@
 </div>
 <?php endforeach; ?>
 </div>
-<?php endforeach; ?>
-
-
-<div class="notelist_summary">
-<span class="total_amount">Gesamt: <span class="counter"><?php echo $this->totalAmount; ?></span></span>
-<span class="catalog_count">Kataloge: <span class="counter"><?php echo $this->catalogCount; ?></span></span>
-<span class="notelist_entries">Gemerkt: <span class="counter"><?php echo $this->entriesCount; ?></span></span>
-</div>
 
 <?php else: ?>
-<p class="info">Your Notelist is empty</p>
+<p class="info"><?php echo $this->empty; ?></p>
 <?php endif; ?>
